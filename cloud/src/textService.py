@@ -1,47 +1,74 @@
-# -------------------------------
-# 文本服务 / BERT 中文微调头部
-# -------------------------------
-
-# 1️⃣ 导入基础库
 import torch
-from transformers import (
-    AutoTokenizer,
-    AutoModelForSequenceClassification,
-    AutoModelForTokenClassification,
-    TrainingArguments,
-    Trainer
-)
+from transformers import BertTokenizer, BertForSequenceClassification, BertForTokenClassification
 
-# 2️⃣ 检查GPU
-device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"Using device: {device}")
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-# 3️⃣ 下载BERT中文基础模型
-# 用于意图分类 (单标签分类)
-local_model_path = r"D:\Doc\ComDes\cloud\src\bert-base-chinese"  # 替换为你的本地模型路径
-intent_model_name = "bert-base-chinese"
-tokenizer = AutoTokenizer.from_pretrained(local_model_path)
+intend_model_path = "D:/Doc/biYeSheJi/cloud/src/models/intent_model"
+slot_model_path = "D:/Doc/biYeSheJi/cloud/src/models/slot_model"
+tokenizer_path = "D:/Doc/biYeSheJi/cloud/src/models/tokenizer"
 
-# 意图分类模型
-intent_model = AutoModelForSequenceClassification.from_pretrained(
-    local_model_path,
-    num_labels=5,               # 你的意图数量
-    problem_type="single_label" # 单标签分类
-).to(device)
+tokenizer = BertTokenizer.from_pretrained(tokenizer_path)
+intend_model = BertForSequenceClassification.from_pretrained(intend_model_path)
+slot_model = BertForTokenClassification.from_pretrained(slot_model_path)
 
-# 如果做槽位填充 (序列标注任务)
-slot_model_name = "bert-base-chinese"
-slot_tokenizer = AutoTokenizer.from_pretrained(slot_model_name)
+intend_model.to(device)
+slot_model.to(device)
+intend_model.eval()
+slot_model.eval()
 
-# 假设槽位标签数量为 N
-num_slot_labels = 3  # 根据你自己的标签数
-slot_model = AutoModelForTokenClassification.from_pretrained(
-    slot_model_name,
-    num_labels=num_slot_labels
-).to(device)
+slot_labels = ['o', 'b', 'i']
+slot2id = {label: idx for idx, label in enumerate(slot_labels)}
+id2slot = {idx: label for idx, label in enumerate(slot_labels)}
+intent_labels = ['B', 'F', 'L', 'R', 'S', 'N']
+id2intent = {0: 'B', 1: 'F', 2: 'L', 3: 'R', 4: 'S', 5: 'N'}
+intent2id = {v: k for k, v in id2intent.items()}
+is_single_intent = len(intent2id) == 1
 
-# 4️⃣ 可选：启用 gradient checkpointing 节省显存
-intent_model.gradient_checkpointing_enable()
-slot_model.gradient_checkpointing_enable()
+def predict(text):
+    # 预处理输入
+    inputs = tokenizer(
+        text,
+        return_tensors='pt',
+        padding='max_length',
+        max_length=30,
+        truncation=True
+    ).to(device)
+    
+    # 关闭梯度计算
+    with torch.no_grad():
+        # 1. 槽位预测
+        slot_logits = slot_model(**inputs).logits
+        slot_preds = torch.argmax(slot_logits, dim=-1).squeeze().cpu().numpy()
+        
+        # 2. 意图预测
+        intent_logits = intend_model(**inputs).logits
+        if is_single_intent:
+            # 单意图直接返回唯一标签
+            intent_label = intent_labels[0]
+        else:
+            intent_pred = torch.argmax(intent_logits, dim=-1).item()
+            intent_label = id2intent[intent_pred]
+    
+    # 解析槽位（过滤特殊token）
+    tokens = tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])
+    slot_results = []
+    for token, pred in zip(tokens, slot_preds):
+        if token in ['[CLS]', '[SEP]', '[PAD]']:
+            continue
+        slot_label = id2slot[pred] if pred != -100 else 'o'
+        slot_results.append((token, slot_label))
+    
+    return {
+        '输入文本': text,
+        '预测意图': intent_label,
+        '槽位预测': slot_results
+    }
 
-print("模型与分词器加载完成 ✅")
+print("模型加载完成")
+
+test_text = "呱，是敌人，快撤"
+result = predict(test_text)
+print("===== 推理结果 =====")
+print(f"输入文本：{result['输入文本']}")
+print(f"预测意图：{result['预测意图']}")
+print(f"槽位预测：{result['槽位预测']}")
