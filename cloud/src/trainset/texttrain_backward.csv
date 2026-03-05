@@ -580,3 +580,11 @@ text,intent,slots
 后退8米。,B,oobio
 往后撤3米。,B,ooobio
 请退后7米。,B,ooobio
+全军撤退！,B,ooooo
+立刻后撤！,B,ooooo
+有序撤退！,B,ooooo
+撤出战斗！,B,ooooo
+停止进攻，后撤！,B,oooooooo
+全体后撤到防线！,B,oooooooo
+撤回阵地！,B,ooooo
+保存战力，撤退！,B,oooooooo
