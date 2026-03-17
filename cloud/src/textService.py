@@ -19,8 +19,8 @@ slot_model.eval()
 slot_labels = ['o', 'b', 'i']
 slot2id = {label: idx for idx, label in enumerate(slot_labels)}
 id2slot = {idx: label for idx, label in enumerate(slot_labels)}
-intent_labels = ['B', 'F', 'L', 'R', 'S', 'N']
-id2intent = {0: 'B', 1: 'F', 2: 'L', 3: 'R', 4: 'S', 5: 'N'}
+intent_labels = ['F', 'B', 'L', 'R', 'S', 'N']
+id2intent = {0: 'F', 1: 'B', 2: 'L', 3: 'R', 4: 'S', 5: 'N'}
 intent2id = {v: k for k, v in id2intent.items()}
 is_single_intent = len(intent2id) == 1
 
@@ -65,10 +65,40 @@ def predict(text):
     }
 
 print("模型加载完成")
-
+'''
 test_text = "呱，是敌人，快撤"
 result = predict(test_text)
 print("===== 推理结果 =====")
 print(f"输入文本：{result['输入文本']}")
 print(f"预测意图：{result['预测意图']}")
 print(f"槽位预测：{result['槽位预测']}")
+'''
+import socket
+
+HOST = "127.0.0.1"
+PORT = 10086
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.bind((HOST, PORT))
+    s.listen(5)
+    print(f"Listening on {HOST}:{PORT}")
+
+    while True:
+        conn, addr = s.accept()
+        print("Connected by", addr)
+
+        with conn:
+            while True:
+                data = conn.recv(4096)
+                if not data:
+                    print("客户端断开")
+                    break
+
+                text = data.decode("utf-8", errors="ignore")
+
+                result = predict(text)
+
+                print("===== 推理结果 =====")
+                print(f"输入文本：{result['输入文本']}")
+                print(f"预测意图：{result['预测意图']}")
+                print(f"槽位预测：{result['槽位预测']}")
